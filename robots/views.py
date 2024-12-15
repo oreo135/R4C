@@ -1,7 +1,10 @@
 import json
+import datetime
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.dateparse import parse_datetime
+from openpyxl import Workbook
+from django.http import HttpResponse
 from .models import Robot
 
 
@@ -57,3 +60,46 @@ def add_robot(request):
     return JsonResponse({"error": "Метод не поддерживается. Используйте POST"},
                         status=405,
                         json_dumps_params={'ensure_ascii': False})
+
+def download_report(request):
+    # Определяем диапазон дат (последняя неделя)
+    today = datetime.date.today()
+    week_ago = today - datetime.timedelta(days=7)
+
+    # Фильтруем роботов по дате создания
+    robots = Robot.objects.filter(created__date__gte=week_ago)
+
+    # Группируем данные по моделям и версиям
+    data = {}
+    for robot in robots:
+        model = robot.model
+        version = robot.version
+        if model not in data:
+            data[model] = {}
+        if version not in data[model]:
+            data[model][version] = 0
+        data[model][version] += 1
+
+    # Создаём Excel-файл
+    wb = Workbook()
+
+    for model, versions in data.items():
+        # Создаём новый лист для каждой модели
+        sheet = wb.create_sheet(title=model)
+        sheet.append(["Модель", "Версия", "Количество за неделю"])  # Заголовки
+
+        for version, count in versions.items():
+            # Добавляем строки для каждой версии
+            sheet.append([model, version, count])
+
+    # Удаляем стандартный лист, если он есть
+    if 'Sheet' in wb.sheetnames and len(wb.sheetnames) > 1:
+        wb.remove(wb['Sheet'])
+
+    # Возвращаем файл как ответ
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="robots_report.xlsx"'
+    wb.save(response)
+
+    return response
+

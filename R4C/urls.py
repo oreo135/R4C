@@ -20,4 +20,5 @@ from robots import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('robots/add/', views.add_robot, name='add-robot'),
+    path('robots/report/', views.download_report, name='download-report'),
 ]
